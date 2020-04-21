@@ -58,8 +58,11 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		return nil, err
 	}
 
+	client := mgr.GetClient()
+	scheme := mgr.GetScheme()
+	ctx := context.TODO()
 	return &ReconcileAPIManager{
-		BaseReconciler: reconcilers.NewBaseReconciler(mgr, apiClientReader, log),
+		BaseReconciler: reconcilers.NewBaseReconciler(client, scheme, apiClientReader, ctx, log),
 	}, nil
 
 }

@@ -11,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -25,18 +24,23 @@ func CreateOnlyMutator(existing, desired common.KubernetesObject) (bool, error) 
 }
 
 type BaseReconciler struct {
-	mgr             manager.Manager
+	client          client.Client
+	scheme          *runtime.Scheme
 	apiClientReader client.Reader
+	ctx             context.Context
 	logger          logr.Logger
 }
 
 // blank assignment to verify that BaseReconciler implements reconcile.Reconciler
 var _ reconcile.Reconciler = &BaseReconciler{}
 
-func NewBaseReconciler(mgr manager.Manager, apiClientReader client.Reader, logger logr.Logger) *BaseReconciler {
+func NewBaseReconciler(client client.Client, scheme *runtime.Scheme, apiClientReader client.Reader,
+	ctx context.Context, logger logr.Logger) *BaseReconciler {
 	return &BaseReconciler{
-		mgr:             mgr,
+		client:          client,
+		scheme:          scheme,
 		apiClientReader: apiClientReader,
+		ctx:             ctx,
 		logger:          logger,
 	}
 }
@@ -48,7 +52,7 @@ func (b *BaseReconciler) Reconcile(reconcile.Request) (reconcile.Result, error) 
 // Client returns a split client that reads objects from
 // the cache and writes to the Kubernetes APIServer
 func (b *BaseReconciler) Client() client.Client {
-	return b.mgr.GetClient()
+	return b.client
 }
 
 // APIClientReader return a client that directly reads objects
@@ -58,7 +62,7 @@ func (b *BaseReconciler) APIClientReader() client.Reader {
 }
 
 func (b *BaseReconciler) Scheme() *runtime.Scheme {
-	return b.mgr.GetScheme()
+	return b.scheme
 }
 
 func (b *BaseReconciler) Logger() logr.Logger {
@@ -81,7 +85,7 @@ func (b *BaseReconciler) ReconcileResource(obj, desired common.KubernetesObject,
 		return err
 	}
 
-	if err = b.Client().Get(context.TODO(), key, obj); err != nil {
+	if err = b.Client().Get(b.ctx, key, obj); err != nil {
 		if !errors.IsNotFound(err) {
 			return err
 		}
@@ -114,12 +118,12 @@ func (b *BaseReconciler) ReconcileResource(obj, desired common.KubernetesObject,
 
 func (b *BaseReconciler) CreateResource(obj common.KubernetesObject) error {
 	b.Logger().Info(fmt.Sprintf("Created object %s", common.ObjectInfo(obj)))
-	return b.Client().Create(context.TODO(), obj)
+	return b.Client().Create(b.ctx, obj)
 }
 
 func (b *BaseReconciler) UpdateResource(obj common.KubernetesObject) error {
 	b.Logger().Info(fmt.Sprintf("Updated object %s", common.ObjectInfo(obj)))
-	return b.Client().Update(context.TODO(), obj)
+	return b.Client().Update(b.ctx, obj)
 }
 
 func (b *BaseReconciler) DeleteResource(obj common.KubernetesObject) error {
